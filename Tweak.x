@@ -1,7 +1,9 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-// 何もフックしない、ただ「読み込んだじょ」とログを出すだけのコードだじょ
+// ここに相棒の住所をメモとして置いておくじょ（コメントアウトしてるからエラーにならないニダ）
+// Offset: 0x03A79000
+
 %ctor {
-    NSLog(@"[ESP_TEST] Build Success!");
+    NSLog(@"[ESP] Build Success! Connection established.");
 }
