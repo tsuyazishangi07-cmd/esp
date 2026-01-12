@@ -1,0 +1,9 @@
+Package: com.yourname.knivesoutesp
+Name: KnivesOutESP
+Depends: mobilesubstrate
+Version: 0.0.1
+Architecture: iphoneos-arm
+Description: My First ESP for Knives Out
+Maintainer: 相棒
+Author: 相棒
+Section: Tweaks
