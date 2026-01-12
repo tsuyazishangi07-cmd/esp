@@ -1,18 +1,26 @@
-name: build_esp
+name: KnivesOut_ESP_Build
 on: [push, workflow_dispatch]
+
 jobs:
   build:
-    runs-on: ubuntu-latest # これが一番爆速で順番が回ってくるじょ！
+    runs-on: macos-12
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4 # 最新版(v4)にアップデートしたじょ！
+
       - name: Setup Theos
         run: |
           git clone --depth 1 --recursive https://github.com/theos/theos.git ~/theos
-          # SDKもLinux環境で読み込めるように調整済みだじょ
-          curl -LO https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz
-          tar -xf iPhoneOS14.5.sdk.tar.xz -C ~/theos/sdks
+          # SDKのダウンロード先を、より安定している場所に変えたニダ！
+          curl -L https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz -o ~/iPhoneOS14.5.sdk.tar.xz
+          tar -xf ~/iPhoneOS14.5.sdk.tar.xz -C ~/theos/sdks
           echo "THEOS=~/theos" >> $GITHUB_ENV
-      - name: Build
+
+      - name: Build Package
         run: |
-          export THEOS=~/theos
           make package FINALPACKAGE=1
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4 # エラーの原因だったv3からv4へ修正！
+        with:
+          name: KnivesOut_DEB
+          path: packages/*.deb
