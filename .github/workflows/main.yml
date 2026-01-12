@@ -2,21 +2,26 @@ name: KnivesOut_ESP_Build
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # 手動ボタンを確実に出すじょ！
 
 jobs:
   build:
-    runs-on: macos-12
+    # 'latest' は混むから 'macos-12' に指定するのがコツだじょ！
+    runs-on: macos-12 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Setup Theos
+      - name: Setup Theos and SDK
         run: |
+          # 最小限のダウンロードで速く終わらせるじょ！
           git clone --depth 1 --recursive https://github.com/theos/theos.git ~/theos
           curl -LO https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz
           tar -xf iPhoneOS14.5.sdk.tar.xz -C ~/theos/sdks
           echo "THEOS=~/theos" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build Package
         run: |
+          # ここでビルド！
+          cd $GITHUB_WORKSPACE
           make package FINALPACKAGE=1
