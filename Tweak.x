@@ -2,63 +2,75 @@
 #import <mach-o/dyld.h>
 
 // --- 設定エリア ---
-#define TARGET_OFFSET 0x03A79000 // 相棒が解析したアドレスだじょ！
+#define TARGET_OFFSET 0x03A79000 
 
 static UIButton *menuButton;
+// ここを UIView * に修正したじょ！
 static UIView *espBox;
 static BOOL isEspOn = NO;
 
-// --- メモリを読み取るための関数 ---
-// 難しい計算（ASLR補正）を自動でやってくれる魔法の関数だじょ
+// --- メモリを読み取るための魔法 ---
 template <typename T>
 T ReadMemory(uintptr_t address) {
     uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
-    return *(T*)(slide + address);
+    // メモリ保護で落ちないように、安全なポインタチェックを入れるじょ
+    uintptr_t target = slide + address;
+    if (target < 0x100000000) return 0; 
+    return *(T*)target;
 }
 
-// --- メインのタイマー処理 ---
-// 1秒間に30回、敵の位置を確認して四角を動かすじょ！
+// --- 更新処理 ---
 static void updateEsp() {
     if (!isEspOn || !espBox) return;
 
-    // 本来はここで「敵のリスト」をループして全員分描くけど、
-    // まずは「一人目の敵」の座標をターゲットにするじょ！
+    // 敵の座標を読み取る（相棒のアドレスを使用）
+    float enemyX = ReadMemory<float>(TARGET_OFFSET);
+    float enemyY = ReadMemory<float>(TARGET_OFFSET + 0x4);
     
-    // ⚠️ 注意：以下のオフセット(+0x10など)はゲームによって違うから、
-    // 相棒が解析した「X座標がどこにあるか」に合わせて調整が必要だじょ！
-    float enemyX = ReadMemory<float>(TARGET_OFFSET + 0x0); // X座標
-    float enemyY = ReadMemory<float>(TARGET_OFFSET + 0x4); // Y座標
-    
-    // 取得した座標を画面の座標に反映させるニダ！
     dispatch_async(dispatch_get_main_queue(), ^{
-        // とりあえず座標を画面上の位置に代入してみるじょ
-        // (本来はここでWorldToScreenという3D→2D変換が必要だじょ)
-        espBox.center = CGPointMake(enemyX, enemyY);
+        // 読み取った値が 0 じゃなければ、その場所に四角を移動させるじょ！
+        if (enemyX != 0 && enemyY != 0) {
+            espBox.center = CGPointMake(enemyX, enemyY);
+        }
     });
 }
 
 %ctor {
-    // 15秒待ってからボタンと枠を作る安全設計だじょ
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *window = [UIApplication sharedApplication].keyWindow;
+        UIWindow *window = nil;
+        // 最新のiOSでも画面を取れるようにするおまじない
+        if (@available(iOS 13.0, *)) {
+            for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                if (scene.activationState == UISceneActivationStateForegroundActive) {
+                    window = ((UIWindowScene*)scene).windows.firstObject;
+                    break;
+                }
+            }
+        } else {
+            window = [UIApplication sharedApplication].keyWindow;
+        }
+
         if (!window) return;
 
-        // 1. 敵を追跡する四角
+        // 1. 追跡用の四角
         espBox = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 80, 80)];
-        espBox.layer.borderColor = [UIColor limeColor].CGColor;
-        espBox.layer.borderWidth = 2.0;
+        // 色を lime から green に変更してエラー回避だじょ！
+        espBox.layer.borderColor = [UIColor greenColor].CGColor;
+        espBox.layer.borderWidth = 3.0;
         espBox.hidden = YES;
+        espBox.userInteractionEnabled = NO;
         [window addSubview:espBox];
 
-        // 2. メニューボタン
+        // 2. ボタン
         menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        menuButton.frame = CGRectMake(80, 80, 100, 40);
+        menuButton.frame = CGRectMake(80, 80, 120, 45);
         [menuButton setTitle:@"ESP: OFF" forState:UIControlStateNormal];
         [menuButton setBackgroundColor:[UIColor redColor]];
+        [menuButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        menuButton.layer.cornerRadius = 10;
         [menuButton addTarget:window action:@selector(toggleEsp) forControlEvents:UIControlEventTouchUpInside];
         [window addSubview:menuButton];
 
-        // 定期的に座標を更新するタイマーをスタート！
         [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer * _Nonnull timer) {
             updateEsp();
         }];
