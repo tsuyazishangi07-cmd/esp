@@ -1,0 +1,33 @@
+name: iOS_ESP_Build
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # 手動でビルドボタンを押せるようにするじょ！
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Set up Theos
+        run: |
+          export THEOS=~/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          # 荒野行動(ARM64)用のSDKをダウンロード（ここは一般的なiOS SDKでOKだじょ）
+          curl -LO https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz
+          tar -xf iPhoneOS14.5.sdk.tar.xz -C $THEOS/sdks
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+      - name: Build Package
+        run: |
+          export THEOS=~/theos
+          make package FINALPACKAGE=1
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: KnivesOut_ESP_DEB
+          path: packages/*.deb
