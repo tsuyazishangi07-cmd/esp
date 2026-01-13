@@ -2,43 +2,54 @@
 #import <mach-o/dyld.h>
 
 // --- 設定エリア ---
-#define TARGET_OFFSET 0x03A79000 
+#define TARGET_OFFSET 0x03A79000 // 相棒のアドレス
 
 static UIButton *menuButton;
-// ここを UIView * に修正したじょ！
 static UIView *espBox;
 static BOOL isEspOn = NO;
 
-// --- メモリを読み取るための魔法 ---
-template <typename T>
-T ReadMemory(uintptr_t address) {
+// --- メモリ読み取り関数（エラー回避版） ---
+static float ReadFloat(uintptr_t address) {
     uintptr_t slide = _dyld_get_image_vmaddr_slide(0);
-    // メモリ保護で落ちないように、安全なポインタチェックを入れるじょ
     uintptr_t target = slide + address;
-    if (target < 0x100000000) return 0; 
-    return *(T*)target;
+    
+    // 安全チェック：変な場所を読もうとしたら0を返すじょ
+    if (target < 0x100000000) return 0.0f; 
+    
+    float value = 0;
+    // memcpyを使って安全に値をコピーするニダ
+    if (address != 0) {
+        @try {
+            value = *(float*)target;
+        } @catch (NSException *e) {
+            return 0.0f;
+        }
+    }
+    return value;
 }
 
-// --- 更新処理 ---
+// --- 更新処理（1秒間に30回実行） ---
 static void updateEsp() {
     if (!isEspOn || !espBox) return;
 
-    // 敵の座標を読み取る（相棒のアドレスを使用）
-    float enemyX = ReadMemory<float>(TARGET_OFFSET);
-    float enemyY = ReadMemory<float>(TARGET_OFFSET + 0x4);
+    // メモリからXとYを取得
+    float enemyX = ReadFloat(TARGET_OFFSET);
+    float enemyY = ReadFloat(TARGET_OFFSET + 0x4);
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 読み取った値が 0 じゃなければ、その場所に四角を移動させるじょ！
-        if (enemyX != 0 && enemyY != 0) {
+        // 値が取得できていれば、四角をその場所に移動！
+        if (enemyX > 1.0f && enemyY > 1.0f) {
+            // ※本来はここにWorldToScreenが必要だけど、まずは生データを反映させるじょ
             espBox.center = CGPointMake(enemyX, enemyY);
         }
     });
 }
 
 %ctor {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // 完全に起動するまで20秒待つ超安全設計！
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        
         UIWindow *window = nil;
-        // 最新のiOSでも画面を取れるようにするおまじない
         if (@available(iOS 13.0, *)) {
             for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
                 if (scene.activationState == UISceneActivationStateForegroundActive) {
@@ -52,26 +63,26 @@ static void updateEsp() {
 
         if (!window) return;
 
-        // 1. 追跡用の四角
+        // 追跡用の枠（緑色）
         espBox = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 80, 80)];
-        // 色を lime から green に変更してエラー回避だじょ！
         espBox.layer.borderColor = [UIColor greenColor].CGColor;
-        espBox.layer.borderWidth = 3.0;
+        espBox.layer.borderWidth = 2.0;
         espBox.hidden = YES;
         espBox.userInteractionEnabled = NO;
         [window addSubview:espBox];
 
-        // 2. ボタン
+        // メニューボタン
         menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        menuButton.frame = CGRectMake(80, 80, 120, 45);
+        menuButton.frame = CGRectMake(100, 60, 110, 40);
         [menuButton setTitle:@"ESP: OFF" forState:UIControlStateNormal];
-        [menuButton setBackgroundColor:[UIColor redColor]];
+        [menuButton setBackgroundColor:[UIColor colorWithRed:1 green:0 blue:0 alpha:0.7]];
         [menuButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        menuButton.layer.cornerRadius = 10;
-        [menuButton addTarget:window action:@selector(toggleEsp) forControlEvents:UIControlEventTouchUpInside];
+        menuButton.layer.cornerRadius = 12;
+        [menuButton addTarget:window action:@selector(handleEspToggle) forControlEvents:UIControlEventTouchUpInside];
         [window addSubview:menuButton];
 
-        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer * _Nonnull timer) {
+        // タイマー開始
+        [NSTimer scheduledTimerWithTimeInterval:0.03 repeats:YES block:^(NSTimer *timer) {
             updateEsp();
         }];
     });
@@ -79,15 +90,15 @@ static void updateEsp() {
 
 %hook UIWindow
 %new
-- (void)toggleEsp {
+- (void)handleEspToggle {
     isEspOn = !isEspOn;
     espBox.hidden = !isEspOn;
     if (isEspOn) {
         [menuButton setTitle:@"ESP: ON" forState:UIControlStateNormal];
-        [menuButton setBackgroundColor:[UIColor greenColor]];
+        [menuButton setBackgroundColor:[UIColor colorWithRed:0 green:0.7 blue:0 alpha:0.7]];
     } else {
         [menuButton setTitle:@"ESP: OFF" forState:UIControlStateNormal];
-        [menuButton setBackgroundColor:[UIColor redColor]];
+        [menuButton setBackgroundColor:[UIColor colorWithRed:1 green:0 blue:0 alpha:0.7]];
     }
 }
 %end
